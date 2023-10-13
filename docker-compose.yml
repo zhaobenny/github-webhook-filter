@@ -1,0 +1,13 @@
+version: '3'
+
+services:
+  github-webhook-filter:
+    container_name: "github-webhook-filter"
+    image: "ghcr.io/zhaobenny/github-webhook-filter:main"
+    environment:
+      - WEBHOOKS=https://example.com/webhook1,https://example.com/webhook2 # comma separated list of webhooks to forward to
+      - WHITELISTED_BRANCHES="main,master" # comma separated list of branches to forward
+      - WEBHOOK_SECRET="" # optional secret (that was given to Github already) to verify the webhook payload
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
