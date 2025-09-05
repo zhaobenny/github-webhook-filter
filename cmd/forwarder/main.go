@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
+
+	"gh-webhook-forwarder/internal/forwarder"
 )
 
 type Ref struct {
@@ -34,7 +36,7 @@ func webhookHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if webhookSecret != "" {
-		err = VerifySignature(body, webhookSecret, r.Header.Get("X-Hub-Signature-256"))
+		err = forwarder.VerifySignature(body, webhookSecret, r.Header.Get("X-Hub-Signature-256"))
 	}
 	if err != nil {
 		fmt.Println(err)
@@ -51,7 +53,7 @@ func webhookHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	branchName, err := ExtractBranchName(ref.RefText)
+	branchName, err := forwarder.ExtractBranchName(ref.RefText)
 	isWhitelisted := false
 
 	if err == nil {

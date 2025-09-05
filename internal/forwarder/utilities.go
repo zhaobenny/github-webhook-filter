@@ -1,4 +1,4 @@
-package main
+package forwarder
 
 import (
 	"crypto/hmac"
