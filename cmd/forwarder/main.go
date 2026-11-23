@@ -16,18 +16,10 @@ import (
 )
 
 var whitelistedBranches = []string{}
-var whitelistedBranchRegex *regexp.Regexp
+var webhookPayloadRegex *regexp.Regexp
 var webhooks = []string{}
 var webhookSecret = ""
 var commitPushOnly bool
-
-func branchAllowed(branch string) bool {
-	if branch == "" {
-		return false
-	}
-	return slices.Contains(whitelistedBranches, branch) ||
-		(whitelistedBranchRegex != nil && whitelistedBranchRegex.MatchString(branch))
-}
 
 func eventBranch(event string, body []byte) (string, error) {
 	if commitPushOnly {
@@ -95,7 +87,11 @@ func webhookHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !branchAllowed(branch) {
+	if branch == "" || !slices.Contains(whitelistedBranches, branch) {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if webhookPayloadRegex != nil && !webhookPayloadRegex.Match(body) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -130,12 +126,12 @@ func main() {
 	if whitelistEnv != "" {
 		whitelistedBranches = strings.Split(whitelistEnv, ",")
 	}
-	if pattern := os.Getenv("WHITELISTED_BRANCH_REGEX"); pattern != "" {
+	if pattern := os.Getenv("WEBHOOK_PAYLOAD_REGEX"); pattern != "" {
 		compiled, err := regexp.Compile(pattern)
 		if err != nil {
-			log.Fatalf("invalid WHITELISTED_BRANCH_REGEX: %v", err)
+			log.Fatalf("invalid WEBHOOK_PAYLOAD_REGEX: %v", err)
 		}
-		whitelistedBranchRegex = compiled
+		webhookPayloadRegex = compiled
 	}
 
 	webhooksEnv := os.Getenv("WEBHOOKS")

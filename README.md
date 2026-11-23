@@ -13,13 +13,12 @@ For the final webhooks destinations, add the URLs to the `WEBHOOKS` env within t
 
 By default, the forwarder accepts only pushes with commits to existing allowlisted branches. It skips force-pushes, branch creation and deletion, tag pushes, empty pushes, and other webhook events. Set `COMMIT_PUSH_ONLY=false` in the environment or Compose `.env` file to filter by branch alone.
 
-Use `WHITELISTED_BRANCHES` for comma-separated exact names and `WHITELISTED_BRANCH_REGEX` for a Go regular expression. A match in either setting allows the branch. The regex sees the branch name without `refs/heads/`. Use anchors for a full-name match. An invalid regex stops startup with a configuration error.
+Use `WHITELISTED_BRANCHES` for comma-separated branch names. Set `WEBHOOK_PAYLOAD_REGEX` to require the raw JSON request body to match a Go regular expression. The branch allowlist and `COMMIT_PUSH_ONLY` setting still apply. An empty regex setting disables payload matching. An invalid regex stops startup with a configuration error.
 
-This Compose `.env` example allows `main` and branches under `release/`. Set `WHITELISTED_BRANCHES=` to use only the regex.
+This Compose `.env` example requires a JSON `message` field that starts with `Deploy:`.
 
 ```dotenv
-WHITELISTED_BRANCHES=main
-WHITELISTED_BRANCH_REGEX='^release/.+$'
+WEBHOOK_PAYLOAD_REGEX='"message"[[:space:]]*:[[:space:]]*"Deploy:'
 ```
 
 (Using the Github webhook `secret` option is also recommended!)

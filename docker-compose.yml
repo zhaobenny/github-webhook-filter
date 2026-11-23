@@ -10,8 +10,8 @@ services:
       - "8080:8080" # push Github webhook events to http://<HOST>:8080/forward
     environment:
       - WEBHOOKS=https://example.com/webhook1,https://example.com/webhook2 # comma separated list of webhooks to forward to
-      - WHITELISTED_BRANCHES=${WHITELISTED_BRANCHES-main,master} # comma separated list of exact branch names
-      - WHITELISTED_BRANCH_REGEX=${WHITELISTED_BRANCH_REGEX:-} # optional Go regular expression
+      - WHITELISTED_BRANCHES=main,master # comma separated list of branches to forward
+      - WEBHOOK_PAYLOAD_REGEX=${WEBHOOK_PAYLOAD_REGEX:-} # optional Go regular expression for the raw JSON body
       - COMMIT_PUSH_ONLY=${COMMIT_PUSH_ONLY:-true} # set to false to disable commit-only filtering
       #- WEBHOOK_SECRET=optional secret (that was given to Github already) to verify the webhook payload
     read_only: true
