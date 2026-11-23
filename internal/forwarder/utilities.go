@@ -5,25 +5,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"strings"
 )
 
 func ExtractBranchName(ref string) (string, error) {
-
-	if ref == "" {
-		return "", errors.New("empty value for 'refs'")
+	branch, ok := strings.CutPrefix(ref, "refs/heads/")
+	if !ok || branch == "" {
+		return "", errors.New("ref is not a branch")
 	}
-
-	parts := strings.Split(ref, "refs/heads/")
-	if len(parts) != 2 {
-		fmt.Println("The value associated with 'refs' does not contain 'refs/heads/ substring!'")
-		return "", errors.New("bad value for 'refs")
-	}
-
-	branchName := parts[1]
-	return branchName, nil
-
+	return branch, nil
 }
 
 func VerifySignature(payloadBody []byte, secretToken string, signatureHeader string) error {

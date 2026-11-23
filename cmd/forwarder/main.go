@@ -5,20 +5,56 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
+	"regexp"
+	"slices"
 	"strings"
 
 	"gh-webhook-forwarder/internal/forwarder"
 )
 
-type Ref struct {
-	RefText string `json:"ref,omitempty"`
-}
-
 var whitelistedBranches = []string{}
+var webhookPayloadRegex *regexp.Regexp
 var webhooks = []string{}
 var webhookSecret = ""
+var commitPushOnly bool
+
+func eventBranch(event string, body []byte) (string, error) {
+	if commitPushOnly {
+		if event != "push" {
+			return "", nil
+		}
+		var push struct {
+			Ref     string            `json:"ref"`
+			Created bool              `json:"created"`
+			Deleted bool              `json:"deleted"`
+			Forced  bool              `json:"forced"`
+			Commits []json.RawMessage `json:"commits"`
+		}
+		if err := json.Unmarshal(body, &push); err != nil {
+			return "", err
+		}
+		if push.Created || push.Deleted || push.Forced || len(push.Commits) == 0 {
+			return "", nil
+		}
+		branch, _ := forwarder.ExtractBranchName(push.Ref)
+		return branch, nil
+	}
+
+	var payload struct {
+		Ref string `json:"ref"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return "", err
+	}
+	branch, err := forwarder.ExtractBranchName(payload.Ref)
+	if err != nil {
+		fmt.Println(err)
+	}
+	return branch, nil
+}
 
 func webhookHandler(w http.ResponseWriter, r *http.Request) {
 
@@ -44,59 +80,43 @@ func webhookHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var ref Ref
-
-	err = json.Unmarshal(body, &ref) // finding branch name
+	branch, err := eventBranch(ghHeader, body)
 	if err != nil {
 		fmt.Println(err)
 		http.Error(w, "Unable to unmarshal JSON", http.StatusBadRequest)
 		return
 	}
 
-	branchName, err := forwarder.ExtractBranchName(ref.RefText)
-	isWhitelisted := false
-
-	if err == nil {
-		for _, allowedBranch := range whitelistedBranches {
-			if branchName == allowedBranch {
-				isWhitelisted = true
-				break
-			}
-		}
+	if branch == "" || !slices.Contains(whitelistedBranches, branch) {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if webhookPayloadRegex != nil && !webhookPayloadRegex.Match(body) {
+		w.WriteHeader(http.StatusOK)
+		return
 	}
 
-	if err != nil || isWhitelisted {
-		for _, webhook := range webhooks {
-			var resp *http.Response
-
-			requestbody := bytes.NewReader(body)
-
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
-
-			req, err := http.NewRequest("POST", webhook, requestbody)
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
-
-			req.Header.Set("Content-Type", "application/json")
-			for key, value := range r.Header {
-				if strings.HasPrefix(key, "X-") {
-					req.Header[key] = value
-				}
-			}
-
-			resp, err = http.DefaultClient.Do(req)
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
-
-			resp.Body.Close()
+	for _, webhook := range webhooks {
+		req, err := http.NewRequest("POST", webhook, bytes.NewReader(body))
+		if err != nil {
+			fmt.Println(err)
+			continue
 		}
+
+		req.Header.Set("Content-Type", "application/json")
+		for key, value := range r.Header {
+			if strings.HasPrefix(key, "X-") {
+				req.Header[key] = value
+			}
+		}
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+
+		resp.Body.Close()
 	}
 	w.WriteHeader(http.StatusOK)
 }
@@ -106,6 +126,13 @@ func main() {
 	if whitelistEnv != "" {
 		whitelistedBranches = strings.Split(whitelistEnv, ",")
 	}
+	if pattern := os.Getenv("WEBHOOK_PAYLOAD_REGEX"); pattern != "" {
+		compiled, err := regexp.Compile(pattern)
+		if err != nil {
+			log.Fatalf("invalid WEBHOOK_PAYLOAD_REGEX: %v", err)
+		}
+		webhookPayloadRegex = compiled
+	}
 
 	webhooksEnv := os.Getenv("WEBHOOKS")
 	if webhooksEnv != "" {
@@ -113,6 +140,7 @@ func main() {
 	}
 
 	webhookSecret = os.Getenv("WEBHOOK_SECRET")
+	commitPushOnly = os.Getenv("COMMIT_PUSH_ONLY") != "false"
 
 	http.HandleFunc("/forward", webhookHandler)
 
